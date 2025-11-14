@@ -1,0 +1,16 @@
+services:
+  hackathon-api-main:
+    image: ${{ secrets.DOCKERHUB_USERNAME }}/hackathon-api:latest
+    container_name: hackathon-api-main
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+    ports:
+      - "3333:3333"
+
+  hackathon-api-develop:
+    image: ${{ secrets.DOCKERHUB_USERNAME }}/hackathon-api:develop
+    container_name: hackathon-api-develop
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+    ports:
+      - "9999:3333"
