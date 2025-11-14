@@ -6,6 +6,8 @@ services:
       - "com.centurylinklabs.watchtower.enable=true"
     ports:
       - "3333:3333"
+    env_file:
+      - .env
 
   hackathon-api-develop:
     image: jocimsus/hackathon-api:develop
@@ -14,3 +16,5 @@ services:
       - "com.centurylinklabs.watchtower.enable=true"
     ports:
       - "9999:3333"
+    env_file:
+      - .env
