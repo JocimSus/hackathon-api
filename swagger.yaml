@@ -1,0 +1,687 @@
+openapi: 3.0.3
+
+info:
+  title: Hackathon API
+  version: "1.0.0"
+  description: |
+    Hackathon API — Uploads & attachments (presigned uploads) documentation.
+    The docs are served at /hackathon/v1/docs; API routes are relative to /hackathon/v1.
+
+servers:
+  - url: http://localhost:3333/hackathon/v1
+    description: Local development server
+  - url: https://develop-hackathon-api.224668.xyz/hackathon/v1/
+    description: Develop server
+  - url: https://main-hackathon-api.224668.xyz/hackathon/v1/
+    description: Production server
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    LoginRequest:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+          example: farmer@example.com
+        password:
+          type: string
+          format: password
+          example: farmer1000
+
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        name:
+          type: string
+        phone:
+          type: string
+        role:
+          type: string
+          description: user role (farmer, collector, processor, exporter, admin)
+        created_at:
+          type: string
+          format: date-time
+
+    LoginResponse:
+      type: object
+      properties:
+        token:
+          type: string
+          description: JWT token (also set as httpOnly cookie named "session")
+        user:
+          $ref: "#/components/schemas/User"
+
+    MeResponse:
+      type: object
+      properties:
+        user:
+          $ref: "#/components/schemas/User"
+
+    BatchCreateRequest:
+      type: object
+      properties:
+        qr_code:
+          type: string
+          description: Optional custom QR text (if omitted server generates one)
+        catch_time:
+          type: string
+          format: date-time
+          description: Capture time
+        metadata:
+          type: object
+          description: Arbitrary metadata (species, pond_id, etc.)
+      example:
+        qr_code: BATCH-123456
+        catch_time: "2024-01-15T10:00:00Z"
+        metadata:
+          species: Tilapia
+          pond_id: P23
+
+    BatchUpdateRequest:
+      type: object
+      properties:
+        catch_time:
+          type: string
+          format: date-time
+        metadata:
+          type: object
+
+    Batch:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        qr_code:
+          type: string
+        farmer_id:
+          type: string
+          format: uuid
+        catch_time:
+          type: string
+          format: date-time
+          nullable: true
+        metadata:
+          type: object
+        created_at:
+          type: string
+          format: date-time
+        latest_event:
+          type: object
+          nullable: true
+          description: Latest event summary (if any)
+
+    BatchListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Batch"
+        page:
+          type: integer
+        per_page:
+          type: integer
+
+    BatchEvent:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        batch_id:
+          type: string
+          format: uuid
+        actor_id:
+          type: string
+          format: uuid
+        actor_role:
+          type: string
+        action:
+          type: string
+        payload:
+          type: object
+        created_at:
+          type: string
+          format: date-time
+
+    PresignRequest:
+      type: object
+      required:
+        - filename
+      properties:
+        filename:
+          type: string
+          description: Original filename
+          example: photo.jpg
+        contentType:
+          type: string
+          description: MIME type (e.g. image/jpeg)
+          example: image/jpeg
+        batch_id:
+          type: string
+          format: uuid
+          description: Optional batch id to associate the upload
+        kind:
+          type: string
+          description: Kind (photo, certificate, lab_pdf, etc.)
+          example: photo
+
+    PresignResponse:
+      type: object
+      properties:
+        url:
+          type: string
+          description: Presigned PUT URL to upload the file to S3
+          example: https://s3.amazonaws.com/bucket/attachments/
+        key:
+          type: string
+          description: Object key to store in DB (use in upload-complete)
+          example: attachments/81c4c5a9-photo.jpg
+
+    UploadCompleteRequest:
+      type: object
+      required:
+        - key
+        - batch_id
+      properties:
+        key:
+          type: string
+          description: Object key returned from presign
+          example: attachments/81c4c5a9-...-photo.jpg
+        batch_id:
+          type: string
+          format: uuid
+        kind:
+          type: string
+          example: photo
+        mime_type:
+          type: string
+          example: image/jpeg
+        metadata:
+          type: object
+          description: Arbitrary metadata object
+
+    Attachment:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        batch_id:
+          type: string
+          format: uuid
+        uploaded_by:
+          type: string
+          format: uuid
+        kind:
+          type: string
+        url:
+          type: string
+          description: Stored object key (not the full presigned URL)
+        mime_type:
+          type: string
+        metadata:
+          type: object
+        created_at:
+          type: string
+          format: date-time
+
+paths:
+  /auth/login:
+    post:
+      summary: Log in a user (returns JWT & sets httpOnly cookie)
+      tags:
+        - Auth
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Successful login — returns JWT and user profile (also sets httpOnly cookie 'session')
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginResponse"
+        "400":
+          description: Missing email/password
+        "401":
+          description: Invalid credentials
+        "500":
+          description: Server error
+
+  /auth/logout:
+    post:
+      summary: Log out current user (clears session cookie)
+      tags:
+        - Auth
+      security:
+        - bearerAuth: []
+      responses:
+        "204":
+          description: Logged out (cookie cleared)
+        "401":
+          description: Unauthorized
+        "500":
+          description: Server error
+
+  /auth/me:
+    get:
+      summary: Get current authenticated user's profile
+      tags:
+        - Auth
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Current user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MeResponse"
+        "401":
+          description: Unauthorized
+        "500":
+          description: Server error
+
+  /batches:
+    post:
+      summary: Create a new batch (farmer only)
+      tags:
+        - Batches
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BatchCreateRequest"
+      responses:
+        "201":
+          description: Batch created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  batch:
+                    $ref: "#/components/schemas/Batch"
+        "400":
+          description: Bad request
+        "401":
+          description: Unauthorized
+        "403":
+          description: Forbidden (not a farmer)
+        "409":
+          description: QR code conflict
+        "500":
+          description: Server error
+
+    get:
+      summary: List batches (with optional filters & pagination)
+      tags:
+        - Batches
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: per_page
+          in: query
+          schema:
+            type: integer
+            default: 10
+        - name: farmer_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: qr_code
+          in: query
+          schema:
+            type: string
+        - name: q
+          in: query
+          schema:
+            type: string
+            description: full-text search on qr_code and metadata
+      responses:
+        "200":
+          description: List of batches (paged)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BatchListResponse"
+        "401":
+          description: Unauthorized
+        "500":
+          description: Server error
+
+  /batches/{id}:
+    get:
+      summary: Get a single batch by ID
+      tags:
+        - Batches
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Batch details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  batch:
+                    $ref: "#/components/schemas/Batch"
+        "401":
+          description: Unauthorized
+        "404":
+          description: Batch not found
+        "500":
+          description: Server error
+
+    patch:
+      summary: Update a batch (owner farmer or admin)
+      tags:
+        - Batches
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BatchUpdateRequest"
+      responses:
+        "200":
+          description: Updated batch
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  batch:
+                    $ref: "#/components/schemas/Batch"
+        "400":
+          description: Nothing to update
+        "401":
+          description: Unauthorized
+        "403":
+          description: Forbidden
+        "404":
+          description: Batch not found
+        "500":
+          description: Server error
+
+  /batches/{id}/history:
+    get:
+      summary: Get event history and attachments for a batch (paged)
+      tags:
+        - Batches
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: per_page
+          in: query
+          schema:
+            type: integer
+            default: 10
+        - name: role
+          in: query
+          schema:
+            type: string
+            description: filter by actor_role
+        - name: action
+          in: query
+          schema:
+            type: string
+            description: filter by action type
+        - name: start_at
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: end_at
+          in: query
+          schema:
+            type: string
+            format: date-time
+      responses:
+        "200":
+          description: Events list and attachments
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  events:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/BatchEvent"
+                  attachments:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Attachment"
+                  page:
+                    type: integer
+                  per_page:
+                    type: integer
+        "401":
+          description: Unauthorized
+        "404":
+          description: Batch not found
+        "500":
+          description: Server error
+
+  /attachments/presign:
+    post:
+      summary: Create a presigned PUT URL for uploading a file
+      tags:
+        - Attachments
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PresignRequest"
+      responses:
+        "200":
+          description: Presigned URL created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PresignResponse"
+        "400":
+          description: Bad request (missing filename or invalid batch)
+        "401":
+          description: Unauthorized
+        "404":
+          description: Batch not found
+        "500":
+          description: Server error
+
+  /attachments/complete:
+    post:
+      summary: Persist an attachment record after successful upload
+      tags:
+        - Attachments
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UploadCompleteRequest"
+      responses:
+        "201":
+          description: Attachment created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  attachment:
+                    $ref: "#/components/schemas/Attachment"
+        "400":
+          description: Missing parameters
+        "401":
+          description: Unauthorized
+        "404":
+          description: Batch not found
+        "500":
+          description: Server error
+
+  /attachments/batches/{id}:
+    get:
+      summary: List attachments for a given batch
+      tags:
+        - Attachments
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Batch id
+      responses:
+        "200":
+          description: List of attachments
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  attachments:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Attachment"
+        "401":
+          description: Unauthorized
+        "404":
+          description: Batch not found
+        "500":
+          description: Server error
+
+  /attachments/{id}:
+    get:
+      summary: Get attachment metadata and a presigned GET URL
+      tags:
+        - Attachments
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Attachment metadata + presigned GET URL
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  attachment:
+                    $ref: "#/components/schemas/Attachment"
+                  url:
+                    type: string
+                    description: presigned GET URL
+        "401":
+          description: Unauthorized
+        "403":
+          description: Forbidden
+        "404":
+          description: Attachment not found
+        "500":
+          description: Server error
+
+    delete:
+      summary: Delete an attachment (only uploader allowed)
+      tags:
+        - Attachments
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Deleted
+        "401":
+          description: Unauthorized
+        "403":
+          description: Forbidden
+        "404":
+          description: Attachment not found
+        "500":
+          description: Server error
+
+tags:
+  - name: Auth
+    description: Authentication (login, logout, current user)
+  - name: Batches
+    description: Batch management (create, list, get, update, history)
+  - name: Attachments
+    description: Attachment management (presign, complete, list, get, delete)
