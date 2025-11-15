@@ -2,6 +2,10 @@ import bcrypt from 'bcrypt';
 import { pool } from '../lib/db.js';
 import { signToken } from '../utils/jwt.js';
 
+/**
+  * POST /auth/login
+  * Body: { email, password }
+**/
 export async function login(req, res) {
   try {
     const { email, password } = req.body;
@@ -31,11 +35,18 @@ export async function login(req, res) {
   }
 }
 
+/**
+ * POST /auth/logout
+**/
 export async function logout(req, res) {
   res.clearCookie('session', { httpOnly: true, sameSite: 'lax', secure: process.env.NODE_ENV === 'production' });
   return res.status(204).end();
 }
 
+/** 
+ * GET /auth/me
+ * Auth: any logged-in user
+**/
 export async function me(req, res) {
   try {
     const token = req.cookies?.session || req.headers?.authorization?.split?.(' ')[1];
@@ -44,7 +55,7 @@ export async function me(req, res) {
     const payload = require('../utils/jwt.js').verifyToken(token);
     if (!payload?.sub) return res.status(401).json({ error: 'Unauthorized' });
 
-    const rows = await pool.query('SELECT id, email, name, phone, role, created_at FROM app_user WHERE id = $1', [payload.sub]);
+    const { rows } = await pool.query('SELECT id, email, name, phone, role, created_at FROM app_user WHERE id = $1', [payload.sub]);
     const user = rows[0];
     if (!user) return res.status(401).json({ error: 'Unauthorized' });
 
