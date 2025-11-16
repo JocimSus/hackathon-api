@@ -31,7 +31,7 @@ export async function createBatch(req, res) {
       VALUES ($1, $2, $3, $4)
       RETURNING id, qr_code, farmer_id, catch_time, metadata, created_at
     `;
-    const rows = await pool.query(insertBatchSql, [qrText, farmerId, catch_time, meta]);
+    const { rows } = await pool.query(insertBatchSql, [qrText, farmerId, catch_time, meta]);
     const batch = rows[0];
 
     const eventPayload = { created_by: user.id, catch_time: catch_time, metadata: metadata || null };
