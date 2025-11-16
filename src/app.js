@@ -21,7 +21,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 app.use(cookieParser())
 
-app.use("/hackathon/v1", restrictInProd, baseRoute);
+// app.use("/hackathon/v1", baseRoute);
 app.use("/hackathon/v1/auth", authRoutes);
 app.use("/hackathon/v1/batches", batchRoutes);
 app.use("/hackathon/v1/attachments", attachmentRoutes);
