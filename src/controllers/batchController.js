@@ -8,7 +8,7 @@ function genQrText() {
 /**
  * POST /batches
  * Body: { qr_code?, catch_time?, metadata? }
- * Auth: farmer (or allowed roles)
+ * Auth: authenticated (farmer only)
 **/
 export async function createBatch(req, res) {
   try {
@@ -118,7 +118,7 @@ export async function listBatches(req, res) {
 
 /**
  * GET /batches/:id
- * Auth: authenticated (owner or allowed roles)
+ * Auth: authenticated (owner, or other roles in supply chain)
 **/
 export async function getBatch(req, res) {
   try {
@@ -145,7 +145,7 @@ export async function getBatch(req, res) {
 /**
  * PATCH /batches/:id
  * Body: { catch_time?, metadata? }
- * Auth: owner (farmer) or admin
+ * Auth: owner, or other roles in supply chain
 **/
 export async function updateBatch(req, res) {
   try {
@@ -187,7 +187,7 @@ export async function updateBatch(req, res) {
 /**
  * GET /batches/:id/history
  * Query: ?page=&per_page=&role=&action=&start_at=&end_at=
- * Auth: authenticated and authorized
+ * Auth: authenticated (owner, or other roles in supply chain)
 **/
 export async function getBatchHistory(req, res) {
   try {

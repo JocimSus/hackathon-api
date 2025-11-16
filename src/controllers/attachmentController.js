@@ -102,7 +102,7 @@ export async function getAttachment(req, res) {
 
 /**
  * DELETE /api/attachments/:id
- * Only uploader can delete. Also delete object from S3.
+ * Only uploader can delete. Also tries delete object from S3.
 **/
 export async function deleteAttachment(req, res) {
   try {

@@ -5,10 +5,10 @@ info:
   version: "1.0.0"
   description: |
     Hackathon API — Uploads & attachments (presigned uploads) documentation.
-    The docs are served at /hackathon/v1/docs; API routes are relative to /hackathon/v1.
+    API routes are relative to /hackathon/v1.
 
 servers:
-  - url: http://localhost:3333/hackathon/v1
+  - url: http://localhost:3333/hackathon/v1/
     description: Local development server
   - url: https://develop-hackathon-api.224668.xyz/hackathon/v1/
     description: Develop server
@@ -365,9 +365,9 @@ paths:
             type: string
         - name: q
           in: query
+          description: full-text search on qr_code and metadata
           schema:
             type: string
-            description: full-text search on qr_code and metadata
       responses:
         "200":
           description: List of batches (paged)
@@ -412,7 +412,7 @@ paths:
           description: Server error
 
     patch:
-      summary: Update a batch (owner farmer or admin)
+      summary: Update a batch (owner, or other roles in supply chain)
       tags:
         - Batches
       security:
@@ -684,4 +684,10 @@ tags:
   - name: Batches
     description: Batch management (create, list, get, update, history)
   - name: Attachments
-    description: Attachment management (presign, complete, list, get, delete)
+    description: |
+      Attachment management (presign, complete, list, get, delete)
+
+      **Upload Procedure:**
+      1. Request a presigned S3 upload URL with `POST /attachments/presign`.
+      2. Upload the file to S3 in the frontend with `PUT <presigned_url>`.
+      3. Call `POST /attachments/complete` to register the file into the database.
